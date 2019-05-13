@@ -21,10 +21,7 @@ from keras.layers import Dropout
 dataset_train = pd.read_csv('../Data/trainwithp1p2.csv')
 training_set = np.column_stack((dataset_train['P1'],dataset_train['P2']))
 # Feature Scaling
-def scaler(Dataset):
-    sc = MinMaxScaler(feature_range = (0,1) )
-    return sc
-sc = scaler(training_set)
+sc = MinMaxScaler(feature_range = (0,1) )
 scaled_set = sc.fit_transform(training_set)
 
 # Creating a data structure with 60 timesteps and 1 output
@@ -83,21 +80,20 @@ inputs_P2 = dataset_P2[len(dataset_P2) - len(dataset_test) - 60:].values
 inputs_P1 = inputs_P1.reshape(-1,1)
 inputs_P2 = inputs_P2.reshape(-1,1)
 inputs = np.column_stack((dataset_P1,dataset_P2))
-sc2 = scaler(inputs)
-inputs = sc2.fit_transform(inputs)
+inputs = sc.fit_transform(inputs)
 X_test = []
 for i in range(60, dataset_test.shape[0]+61):
     X_test.append(inputs[i-60:i, :])
 X_test = np.array(X_test)
 X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], X_test.shape[2]))
 predicted_humidity = regressor.predict(X_test)
-predicted_humidity = np.column_stack((predicted_humidity,predicted_humidity)) # das ist fürs rückskalieren
-#predicted_humidity = sc2.inverse_transform(predicted_humidity[:,6:8])
-predicted_humidity_unscaled = sc2.inverse_transform(predicted_humidity) #hier war problem weigen ungleichen 
-#vor und nach = irgendwie noch anschauen und gewollte ergebnise rausholen
-#predicted_humidity = predicted_humidity[:,0]
-
-
+predicted_humidity_unscaled = sc.inverse_transform(predicted_humidity[:,0:2])#wir müssen slicen weil sc 2 spalten hatte jetzt aber 5
+lastrow = predicted_humidity[-1,:]
+lastrow = np.column_stack((lastrow,lastrow))
+lastrow = sc.inverse_transform(lastrow)
+predict = lastrow[:,0]
+predicted_humidity = predicted_humidity_unscaled[:,0] #die zweite spalte ist mit p2 scaliert also nutzlos
+print(predict)
 # Visualising the results
 def plot(real,predicted):
     plt.plot(real, color = 'red', label = 'Real ')
