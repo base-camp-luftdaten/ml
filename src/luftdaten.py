@@ -13,6 +13,7 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
 from keras.models import Sequential
+from keras.models import model_from_json
 from keras.layers import Dense
 from keras.layers import LSTM
 from keras.layers import Dropout
@@ -64,9 +65,19 @@ def myRegressor(X_train,y_train):
     regressor.fit(X_train, y_train, epochs = 100, batch_size = 32)
     return regressor
 regressor = myRegressor(X_train,y_train)
-
+########## save model as json
+regressor_json = regressor.to_json()
+with open ("regressor.json", "w") as json_file:
+    json_file.write(regressor_json)
+regressor.save_weights("model.h5")
 ###################################################
 # Part 3 - Making the predictions and visualising the results
+###############load model from json
+json_file = open('regressor.json', 'r')
+loaded_model_json = json_file.read()
+json_file.close()
+loaded_model = model_from_json(loaded_model_json)
+loaded_model.load_weights('model.h5')
 
 # Getting the real humdity
 dataset_test = pd.read_csv('../Data/testwithp1p2.csv')
@@ -87,6 +98,7 @@ for i in range(60, dataset_test.shape[0]+61):
 X_test = np.array(X_test)
 X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], X_test.shape[2]))
 predicted_humidity = regressor.predict(X_test)
+predicted_with_loaded = loaded_model.predict(X_test)
 predicted_humidity_unscaled = sc.inverse_transform(predicted_humidity[:,0:2])#wir müssen slicen weil sc 2 spalten hatte jetzt aber 5
 lastrow = predicted_humidity[-1,:]
 lastrow = np.column_stack((lastrow,lastrow))
