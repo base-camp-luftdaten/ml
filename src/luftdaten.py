@@ -102,7 +102,6 @@ loaded_model.load_weights('model.h5')
 dataset_test = pd.read_csv('../Data/testwithp1p2.csv')
 real = dataset_test['P1'].values
 
-# Getting the predicted stock price of 2017
 '''
 dataset_P1 = pd.concat((dataset_train['P1'], dataset_test['P1']), axis = 0)
 dataset_test_P1 = pd.concat((dataset_test['P1'], dataset_test['P1']), axis = 0)
