@@ -42,13 +42,13 @@ def predict(path,model):
     X_test = np.array(X_test)
     X_test = np.reshape(X_test, (1, X_test.shape[0], X_test.shape[1]))
     predicted = model.predict(X_test)
+    model.compile(optimizer = 'adam', loss = 'mean_squared_error')
     predicted_unscaled = sc.inverse_transform(predicted[:,0:2])#wir müssen slicen weil sc 2 spalten hatte jetzt aber 5
     lastrow = predicted[-1,:]
     lastrow = np.column_stack((lastrow,lastrow))
     lastrow = sc.inverse_transform(lastrow)
     predict = lastrow[:,0]
-    predicted = predicted_unscaled[:,0] #die zweite spalte ist mit p2 scaliert also nutzlos
-    print(predict)
+    predicted = predicted_unscaled[:,0]
     predictfromreal = np.concatenate((real,predict))# so that we have up to the point we predict + the prediction as a graph
     return predict,predictfromreal,predicted, real
 predict,predictfromreal,predicted, real = predict('../Data/testwithp1p2.csv',loaded_model)
@@ -61,7 +61,7 @@ def plot(real,predicted):
     plt.ylabel('P1')
     plt.legend()
     plt.show()
-plot(real,predictfromreal)
+plot(real,predict)
 
 def plot2(plot,name):
     plt.plot(plot, color = 'red', label = 'graph ')
