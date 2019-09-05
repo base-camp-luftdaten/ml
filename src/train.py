@@ -55,24 +55,32 @@ def getDataFromSensor(index, timestamp):
         data.append(dataHour)
     return data
   
-def trainFromSensors(number):
-    i = 0
-    sensorList = getSensorList()
-    week = 7*24*60*60
+def getDataFromSensor(index, timestamp):
     now = time.time()
-    timestamp = int(now-week)
-    while i < number:
-        index = sensorList[i]
-        data = getDataFromSensor(index, str(timestamp))
-        training_set = np.column_stack((data['p10'],data['p25']))
-        sc = MinMaxScaler(feature_range = (0,1))
-        scaled_set = sc.fit_transform(training_set)    
-        X,y = inAndOutput(scaled_set)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        model = loadModel("regressor.json","model.h5")
-        model =furtherTraining(X_train,y_train,model)
-        saveModel(model)
-trainFromSensors(1)        
+    data = [['p10','p25','airPressure','dewPoint','foggProbability','maxWindspeed','precipitation','sleetPrecipitation','sunDuration','sunIntensiity','temperature','visibility','windspeed']] 
+    while timestamp < now:
+        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor="+ index +"&timestamp="+str(timestamp),"index")
+        timestamp = int(timestamp+3600)
+        if(dataHour.iloc[0][0] == 1):
+            p10 = dataHour.iloc[1][4]
+            p25 = dataHour.iloc[1][5]
+            airPressure = dataHour.iloc[3][0]
+            dewPoint = dataHour.iloc[3][1]
+            foggProbability = dataHour.iloc[3][2]
+            maxWindspeed = dataHour.iloc[3][3]
+            precipitation = dataHour.iloc[3][6]
+            sleetPrecipitation = dataHour.iloc[3][7]
+            sunDuration = dataHour.iloc[3][9]
+            sunIntensiity = dataHour.iloc[3][10]
+            temperature = dataHour.iloc[3][11]
+            visibility = dataHour.iloc[3][13]
+            windspeed = dataHour.iloc[3][14]
+            dataHour = [p10,p25,airPressure,dewPoint,foggProbability,maxWindspeed,precipitation,sleetPrecipitation,sunDuration,sunIntensiity,temperature,visibility,windspeed]
+            data.append(dataHour)
+    return data
+
+data = getDataFromSensor(index, timestamp) 
+dataArray = np.array(data)  
 
 ###############################################
 def inAndOutput(training_set):
