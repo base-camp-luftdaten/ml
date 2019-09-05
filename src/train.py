@@ -47,7 +47,12 @@ def getSensorList():
 sensorList = getSensorList()
 
 def getDataFromSensor(index, timestamp):
-    data = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor="+ index +"&timestamp="+timestamp,"index")
+    now = time.time()
+    data = [] 
+    while timestamp < now:
+        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor="+ index +"&timestamp="+str(timestamp),"index")
+        timestamp = int(timestamp+3600)
+        data.append(dataHour)
     return data
   
 def trainFromSensors(number):
