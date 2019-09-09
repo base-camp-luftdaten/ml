@@ -30,6 +30,7 @@ from keras.layers import Dropout
 from keras.models import model_from_json
 
 
+import matplotlib.pyplot as plt
 
 def getSensorList():
     response = requests.get("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors")
@@ -44,23 +45,16 @@ def getSensorList():
         sensor = sensor.replace(',','')
         sensorList.append(sensor)
     return sensorList
-sensorList = getSensorList()
+#sensorList = getSensorList()
 
-def getDataFromSensor(index, timestamp):
+
+  
+def getDataFromSensor(sensorID, timestamp):
     now = time.time()
     data = [] 
-    while timestamp < now:
-        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor="+ index +"&timestamp="+str(timestamp),"index")
-        timestamp = int(timestamp+3600)
-        data.append(dataHour)
-    return data
-  
-def getDataFromSensor(index, timestamp):
-    now = time.time()
-    data = [['p10','p25','airPressure','dewPoint','foggProbability','maxWindspeed','precipitation','sleetPrecipitation','sunDuration','sunIntensiity','temperature','visibility','windspeed']] 
-    while timestamp < now:
-        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor="+ index +"&timestamp="+str(timestamp),"index")
-        timestamp = int(timestamp+3600)
+    while int(timestamp) < now:
+        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + sensorID + "&timestamp="+str(timestamp),"index")
+        timestamp = int(timestamp)+3600
         if(dataHour.iloc[0][0] == 1):
             p10 = dataHour.iloc[1][4]
             p25 = dataHour.iloc[1][5]
@@ -79,19 +73,53 @@ def getDataFromSensor(index, timestamp):
             data.append(dataHour)
     return data
 
-data = getDataFromSensor(index, timestamp) 
-dataArray = np.array(data)  
+def trainFromSensors(number):
+    i = 0
+    now = time.time()
+    sensorList = getSensorList()
+    week = 7*24*60*60 
+    timestamp = int(now-week)
+    while i < number:
+        sensorID = sensorList[i]
+        data = getDataFromSensor(sensorID, str(timestamp))
+        training_set = np.array(data)  
+        if(training_set.shape[0]>60):
+            sc = MinMaxScaler(feature_range = (0,1))
+            training_set = sc.fit_transform(training_set)
+            X,y = inAndOutput(training_set)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+            model = loadModel("regressor.json","model.h5")
+            model =furtherTraining(X_train,y_train,model)
+            saveModel(model)
+            print("saved")
+        i = i+1
+        print(i)
+        
+#trainFromSensors(50)        
+
+#data = getDataFromSensor(index, timestamp) 
+
 
 ###############################################
+def makeScalerForY(training_set):
+    scy = MinMaxScaler(feature_range = (0,1))
+    scal = []
+    for i in range(60, training_set.shape[0]-5):
+        scal.append(training_set[i:i+5, 0:2])
+    scal =  np.array(scal)
+    scal = np.reshape(scal, (scal.shape[0],scal.shape[1]*2))
+    scy.fit_transform(scal)
+    return scy
+    
 def inAndOutput(training_set):
         X = []
         y = []
         for i in range(60, training_set.shape[0]-5):
             X.append(training_set[i-60:i, :])
-            y.append(training_set[i:i+5, 0])
+            y.append(training_set[i:i+5, 0:2])
         X, y = np.array(X), np.array(y)
         # Reshaping
-        y = np.reshape(y, (y.shape[0],y.shape[1]))
+        y = np.reshape(y, (y.shape[0],y.shape[1]*2))
         X = np.reshape(X, (X.shape[0], X.shape[1], X.shape[2]))
         return X, y
     
@@ -108,8 +136,8 @@ def prepData(filepath):
     X,y = inAndOutput(scaled_set)
     return X,y
 
-X_train,y_train = prepData('../Data/trainwithp1p2.csv')
-X_test,y_test = prepData('../Data/testwithp1p2.csv')
+#X_train,y_train = prepData('../Data/trainwithp1p2.csv')
+#X_test,y_test = prepData('../Data/testwithp1p2.csv')
 #########################################################
 # Part 2 - Building the RNN
 
@@ -134,11 +162,11 @@ def myRegressor(X_train,y_train):
     # Compiling the RNN
     regressor.compile(optimizer = 'adam', loss = 'mean_squared_error',metrics=['accuracy'])
     # Fitting the RNN to the Training set
-    regressor.fit(X_train, y_train, epochs = 100, batch_size = 32)
+    regressor.fit(X_train, y_train, epochs = 200, batch_size = 5)
     #scores = regressor.evaluate(X_test,y_test,verbose=0)
     #print(scores)
     return regressor
-regressor = myRegressor(X_train,y_train)
+#regressor = myRegressor(X_train,y_train)
 
 def loadModel(jsonpath,h5path):
     json_file = open(jsonpath, 'r')
@@ -149,7 +177,8 @@ def loadModel(jsonpath,h5path):
     return loaded_model
 
 def furtherTraining(X_train,y_train,regressor):
-    regressor.fit(X_train,y_train, epochs = 100, batch_size = 32)
+    regressor.compile(optimizer = 'adam', loss = 'mean_squared_error',metrics=['accuracy'])
+    regressor.fit(X_train,y_train, epochs = 200, batch_size = 5)
     return regressor
 
 def saveModel(regressor):
@@ -157,7 +186,61 @@ def saveModel(regressor):
     with open ("regressor.json", "w") as json_file:
         json_file.write(regressor_json)
     regressor.save_weights("model.h5")
-saveModel(regressor)
+#saveModel(regressor)
+
+def predictionPlotter():
+    now = time.time()
+    sensorList = getSensorList()
+    week = 7*24*60*60
+    timestamp = int(now-week)
+    data = []
+    sensorID = sensorList[25]
+    data = getDataFromSensor(sensorID, str(timestamp))
+    training_set = np.array(data)
+    scy = makeScalerForY(training_set)
+    sc = MinMaxScaler(feature_range = (0,1))
+    training_set = sc.fit_transform(training_set)
+    X,y = inAndOutput(training_set)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    model = loadModel("regressor.json","model.h5")
+    prediction = model.predict(X_test)
+    prediction2 = scy.inverse_transform(prediction)
+    y_testU = scy.inverse_transform(y_test)
+    plot2(y_testU[:,5],'real')
+    plot2(prediction2[:,5],'predicted')
+#predictionPlotter()
+def predictionGiver(sensorID):
+    now = time.time()
+    week = 7*24*60*60
+    timestamp = int(now-week)
+    data = []
+    data = getDataFromSensor(sensorID, str(timestamp))
+    dataArray = np.array(data)
+    scy = makeScalerForY(dataArray)
+    sc = MinMaxScaler(feature_range = (0,1))
+    dataArray = sc.fit_transform(dataArray)
+    X,y = inAndOutput(dataArray)
+    model = loadModel("regressor.json","model.h5")
+    prediction = model.predict(X)
+    prediction2 = scy.inverse_transform(prediction)
+    return prediction2[-1,:]
+def plot(real,predicted):
+    plt.plot(real, color = 'red', label = 'Real ')
+    plt.plot(predicted, color = 'blue', label = 'Predicted')
+    plt.title('P1 predic')
+    plt.xlabel('Time')
+    plt.ylabel('P1')
+    plt.legend()
+    plt.show()
+#plot(y_test,predicted)
+
+def plot2(plot,name):
+    plt.plot(plot, color = 'red', label = 'graph ')
+    plt.title(name)
+    plt.legend()
+    plt.show()
+#plot2(y_testU[:,5],'real')
+#plot2(prediction[:,5],'predicted')
 #regressor = furtherTraining(X_test,y_test,regressor)
 '''
 nur mit einem datenset testen best loss = 0.01
