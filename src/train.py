@@ -32,6 +32,26 @@ from keras.models import model_from_json
 
 import matplotlib.pyplot as plt
 
+
+def getSensorList():
+    response = requests.get(
+        "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors")
+    content = response.text
+    splitResponse = [x.strip() for x in content.split('}')]
+    sensorList = []
+    count = 0
+    for i in splitResponse:
+        patern = re.compile(r'"(\d+)":{"lat":([-]?\d+[.]\d+),"lon":([-]?\d+[.]\d+)')
+        matches = patern.findall(i)
+        if (len(matches) >= 1):
+            lat = float(matches[0][1])
+            lon = float(matches[0][2])
+            if ((47 < lat) and (lat < 55) and (5 < lon) and (lon < 16))
+                sensorList.append(matches[0][0])
+
+    return sensorList
+
+'''
 def getSensorList():
     response = requests.get("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors")
     content = response.text
@@ -46,7 +66,7 @@ def getSensorList():
         sensorList.append(sensor)
     return sensorList
 #sensorList = getSensorList()
-
+'''
 
   
 def getDataFromSensor(sensorID, timestamp):
