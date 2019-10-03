@@ -32,26 +32,6 @@ from keras.models import model_from_json
 
 import matplotlib.pyplot as plt
 
-
-def getSensorList():
-    response = requests.get(
-        "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors")
-    content = response.text
-    splitResponse = [x.strip() for x in content.split('}')]
-    sensorList = []
-    count = 0
-    for i in splitResponse:
-        patern = re.compile(r'"(\d+)":{"lat":([-]?\d+[.]\d+),"lon":([-]?\d+[.]\d+)')
-        matches = patern.findall(i)
-        if (len(matches) >= 1):
-            lat = float(matches[0][1])
-            lon = float(matches[0][2])
-            if ((47 < lat) and (lat < 55) and (5 < lon) and (lon < 16))
-                sensorList.append(matches[0][0])
-
-    return sensorList
-
-'''
 def getSensorList():
     response = requests.get("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors")
     content = response.text
@@ -66,31 +46,29 @@ def getSensorList():
         sensorList.append(sensor)
     return sensorList
 #sensorList = getSensorList()
-'''
 
   
 def getDataFromSensor(sensorID, timestamp):
     now = time.time()
     data = [] 
     while int(timestamp) < now:
-        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + sensorID + "&timestamp="+str(timestamp),"index")
+        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorWithoutContinuous?sensor=" + sensorID + "&timestamp="+str(timestamp),"index")
         timestamp = int(timestamp)+3600
-        if(dataHour.iloc[0][0] == 1):
-            p10 = dataHour.iloc[1][4]
-            p25 = dataHour.iloc[1][5]
-            airPressure = dataHour.iloc[3][0]
-            dewPoint = dataHour.iloc[3][1]
-            foggProbability = dataHour.iloc[3][2]
-            maxWindspeed = dataHour.iloc[3][3]
-            precipitation = dataHour.iloc[3][6]
-            sleetPrecipitation = dataHour.iloc[3][7]
-            sunDuration = dataHour.iloc[3][9]
-            sunIntensiity = dataHour.iloc[3][10]
-            temperature = dataHour.iloc[3][11]
-            visibility = dataHour.iloc[3][13]
-            windspeed = dataHour.iloc[3][14]
-            dataHour = [p10,p25,airPressure,dewPoint,foggProbability,maxWindspeed,precipitation,sleetPrecipitation,sunDuration,sunIntensiity,temperature,visibility,windspeed]
-            data.append(dataHour)
+        p10 = dataHour.loc['measurement']['p10']
+        p25 = dataHour.loc['measurement']['p25']
+        airPressure = dataHour.loc['weatherReport']['airPressure']
+        dewPoint = dataHour.loc['weatherReport']['dewPoint']
+        foggProbability = dataHour.loc['weatherReport']['foggProbability']
+        maxWindspeed = dataHour.loc['weatherReport']['maxWindspeed']
+        precipitation = dataHour.loc['weatherReport']['precipitation']
+        sleetPrecipitation = dataHour.loc['weatherReport']['sleetPrecipitation']
+        sunDuration = dataHour.loc['weatherReport']['sunDuration']
+        sunIntensity = dataHour.loc['weatherReport']['sunIntensity']
+        temperature = dataHour.loc['weatherReport']['temperature']
+        visibility = dataHour.loc['weatherReport']['visibility']
+        windspeed = dataHour.loc['weatherReport']['windspeed']
+        dataHour = [p10,p25,airPressure,dewPoint,foggProbability,maxWindspeed,precipitation,sleetPrecipitation,sunDuration,sunIntensity,temperature,visibility,windspeed]
+        data.append(dataHour)
     return data
 
 def trainFromSensors(number):
@@ -115,8 +93,6 @@ def trainFromSensors(number):
         i = i+1
         print(i)
         
-#trainFromSensors(50)        
-
 #data = getDataFromSensor(index, timestamp) 
 
 
@@ -231,6 +207,11 @@ def predictionPlotter():
 #predictionPlotter()
 def predictionGiver(sensorID):
     now = time.time()
+
+    latestMeasurement = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + str(sensorID) + "&timestamp="+str(int(now)),"index") 
+    if (latestMeasurement.loc['continuous'][0] != 1):
+        return None
+
     week = 7*24*60*60
     timestamp = int(now-week)
     data = []
@@ -269,3 +250,11 @@ accuracy beidemal 0.2
 wenn man mit einem trainiert und dem anderen tesete loss von 0.08
 
 '''
+
+sensorList = getSensorList()
+for x in sensorList:
+    result = predictionGiver(x)
+    if (type(result) != type(None)):
+        print(result)
+    else:
+        print(x + " is not continuous!")
