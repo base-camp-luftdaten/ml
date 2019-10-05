@@ -18,6 +18,7 @@ from datetime import datetime
 from datetime import timedelta
 import requests 
 import time
+import os
 from pandas.io.json import json_normalize
 
 from sklearn.preprocessing import MinMaxScaler
@@ -52,7 +53,7 @@ def getDataFromSensor(sensorID, timestamp):
     now = time.time()
     data = [] 
     while int(timestamp) < now:
-        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorWithoutContinuous?sensor=" + sensorID + "&timestamp="+str(timestamp),"index")
+        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorWithoutContinuous?sensor=" + sensorID + "&timestamp=" + str(timestamp), "index")
         timestamp = int(timestamp)+3600
         p10 = dataHour.loc['measurement']['p10']
         p25 = dataHour.loc['measurement']['p25']
@@ -205,15 +206,17 @@ def predictionPlotter():
     plot2(y_testU[:,5],'real')
     plot2(prediction2[:,5],'predicted')
 #predictionPlotter()
-def predictionGiver(sensorID):
-    now = time.time()
 
-    latestMeasurement = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + str(sensorID) + "&timestamp="+str(int(now)),"index") 
+def predictionGiver(sensorID, latestTimestamp):
+    url = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + str(sensorID) + "&timestamp="+str(latestTimestamp)
+    print(url)
+
+    latestMeasurement = pd.read_json(url,"index") 
     if (latestMeasurement.loc['continuous'][0] != 1):
         return None
 
     week = 7*24*60*60
-    timestamp = int(now-week)
+    timestamp = int(latestTimestamp-week)
     data = []
     data = getDataFromSensor(sensorID, str(timestamp))
     dataArray = np.array(data)
@@ -225,6 +228,7 @@ def predictionGiver(sensorID):
     prediction = model.predict(X)
     prediction2 = scy.inverse_transform(prediction)
     return prediction2[-1,:]
+
 def plot(real,predicted):
     plt.plot(real, color = 'red', label = 'Real ')
     plt.plot(predicted, color = 'blue', label = 'Predicted')
@@ -251,10 +255,24 @@ wenn man mit einem trainiert und dem anderen tesete loss von 0.08
 
 '''
 
+key = os.environ.get('API_KEY')
+if (key == None):
+    print("No key specified, printing predictions to console only.")
+
 sensorList = getSensorList()
-for x in sensorList:
-    result = predictionGiver(x)
+latestTimestamp = int(time.time())
+
+for i, sensorId in enumerate(sensorList):
+    print(str(i) + " / " + str(len(sensorList)))
+    result = predictionGiver(sensorId, latestTimestamp)
     if (type(result) != type(None)):
-        print(result)
+        if (key == None):
+            print(result)
+        else:
+            requests.post('http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/updatePredictions',
+                        json={"startTime": latestTimestamp,
+                                "sensor": sensorId, 
+                                "values": result.tolist(),
+                                "apiKey": key})
     else:
-        print(x + " is not continuous!")
+        print(sensorId + " is not continuous!")
