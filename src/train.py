@@ -17,6 +17,7 @@ import pandas as pd
 from datetime import datetime
 from datetime import timedelta
 import requests 
+import urllib.request, json
 import time
 import os
 from pandas.io.json import json_normalize
@@ -48,28 +49,42 @@ def getSensorList():
     return sensorList
 #sensorList = getSensorList()
 
-  
+'''
+Starting from timestamp, retrieves all measurements
+made by the sensor in 1 hour steps, up to now
+'''
 def getDataFromSensor(sensorID, timestamp):
-    now = time.time()
-    data = [] 
-    while int(timestamp) < now:
-        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorWithoutContinuous?sensor=" + sensorID + "&timestamp=" + str(timestamp), "index")
-        timestamp = int(timestamp)+3600
-        p10 = dataHour.loc['measurement']['p10']
-        p25 = dataHour.loc['measurement']['p25']
-        airPressure = dataHour.loc['weatherReport']['airPressure']
-        dewPoint = dataHour.loc['weatherReport']['dewPoint']
-        foggProbability = dataHour.loc['weatherReport']['foggProbability']
-        maxWindspeed = dataHour.loc['weatherReport']['maxWindspeed']
-        precipitation = dataHour.loc['weatherReport']['precipitation']
-        sleetPrecipitation = dataHour.loc['weatherReport']['sleetPrecipitation']
-        sunDuration = dataHour.loc['weatherReport']['sunDuration']
-        sunIntensity = dataHour.loc['weatherReport']['sunIntensity']
-        temperature = dataHour.loc['weatherReport']['temperature']
-        visibility = dataHour.loc['weatherReport']['visibility']
-        windspeed = dataHour.loc['weatherReport']['windspeed']
-        dataHour = [p10,p25,airPressure,dewPoint,foggProbability,maxWindspeed,precipitation,sleetPrecipitation,sunDuration,sunIntensity,temperature,visibility,windspeed]
-        data.append(dataHour)
+    data = []
+    fullUrl = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorUntilNow?sensor=" + sensorID + "&timestamp=" + str(timestamp)
+    print(fullUrl)
+    with urllib.request.urlopen(fullUrl) as url:
+        fullData = json.loads(url.read().decode())
+        for singleResult in fullData:
+            measurement = singleResult['measurement']
+            weatherReport = singleResult['weatherReport']
+
+            if (weatherReport == None):
+                continue
+
+            if (measurement == None):
+                continue
+
+            dataHour = [
+                measurement['p10'],
+                measurement['p25'],
+                weatherReport['airPressure'],
+                weatherReport['dewPoint'],
+                weatherReport['foggProbability'],
+                weatherReport['maxWindspeed'],
+                weatherReport['precipitation'],
+                weatherReport['sleetPrecipitation'],
+                weatherReport['sunDuration'],
+                weatherReport['sunIntensity'],
+                weatherReport['temperature'],
+                weatherReport['visibility'],
+                weatherReport['windspeed']
+            ]
+            data.append(dataHour)
     return data
 
 def trainFromSensors(number):
@@ -208,12 +223,13 @@ def predictionPlotter():
 #predictionPlotter()
 
 def predictionGiver(sensorID, latestTimestamp):
-    url = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + str(sensorID) + "&timestamp="+str(latestTimestamp)
-    print(url)
-
-    latestMeasurement = pd.read_json(url,"index") 
-    if (latestMeasurement.loc['continuous'][0] != 1):
-        return None
+    urlFull = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + str(sensorID) + "&timestamp="+str(latestTimestamp)
+    print(urlFull)
+    with urllib.request.urlopen(urlFull) as url:
+        latestMeasurement = json.loads(url.read().decode())
+        isContinuous = latestMeasurement['continuous']
+        if (isContinuous != True):
+            return None
 
     week = 7*24*60*60
     timestamp = int(latestTimestamp-week)
