@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri May 24 14:43:25 2019
-
 @author: Josua
 """
 
@@ -17,7 +16,9 @@ import pandas as pd
 from datetime import datetime
 from datetime import timedelta
 import requests 
+import urllib.request, json
 import time
+import os
 from pandas.io.json import json_normalize
 
 from sklearn.preprocessing import MinMaxScaler
@@ -29,8 +30,18 @@ from keras.layers import LSTM #http://colah.github.io/posts/2015-08-Understandin
 from keras.layers import Dropout
 from keras.models import model_from_json
 
+from keras.optimizers import Adam
 
 import matplotlib.pyplot as plt
+
+import keras
+import tensorflow as tf
+
+
+config = tf.ConfigProto( device_count = {'GPU': 0 , 'CPU': 128} ) 
+sess = tf.Session(config=config) 
+keras.backend.set_session(sess)
+
 
 def getSensorList():
     response = requests.get("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors")
@@ -47,56 +58,69 @@ def getSensorList():
     return sensorList
 #sensorList = getSensorList()
 
-
-  
+'''
+Starting from timestamp, retrieves all measurements
+made by the sensor in 1 hour steps, up to now
+'''
 def getDataFromSensor(sensorID, timestamp):
-    now = time.time()
-    data = [] 
-    while int(timestamp) < now:
-        dataHour = pd.read_json("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + sensorID + "&timestamp="+str(timestamp),"index")
-        timestamp = int(timestamp)+3600
-        if(dataHour.iloc[0][0] == 1):
-            p10 = dataHour.iloc[1][4]
-            p25 = dataHour.iloc[1][5]
-            airPressure = dataHour.iloc[3][0]
-            dewPoint = dataHour.iloc[3][1]
-            foggProbability = dataHour.iloc[3][2]
-            maxWindspeed = dataHour.iloc[3][3]
-            precipitation = dataHour.iloc[3][6]
-            sleetPrecipitation = dataHour.iloc[3][7]
-            sunDuration = dataHour.iloc[3][9]
-            sunIntensiity = dataHour.iloc[3][10]
-            temperature = dataHour.iloc[3][11]
-            visibility = dataHour.iloc[3][13]
-            windspeed = dataHour.iloc[3][14]
-            dataHour = [p10,p25,airPressure,dewPoint,foggProbability,maxWindspeed,precipitation,sleetPrecipitation,sunDuration,sunIntensiity,temperature,visibility,windspeed]
+    data = []
+    fullUrl = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorUntilNow?sensor=" + sensorID + "&timestamp=" + str(timestamp)
+    print(fullUrl)
+    with urllib.request.urlopen(fullUrl) as url:
+        fullData = json.loads(url.read().decode())
+        for singleResult in fullData:
+            measurement = singleResult['measurement']
+            weatherReport = singleResult['weatherReport']
+
+            if (weatherReport == None):
+                return []
+
+            if (measurement == None):
+                return []
+
+            dataHour = [
+                measurement['p10'],
+                measurement['p25'],
+                weatherReport['airPressure'],
+                weatherReport['dewPoint'],
+                weatherReport['foggProbability'],
+                weatherReport['maxWindspeed'],
+                weatherReport['precipitation'],
+                weatherReport['sleetPrecipitation'],
+                weatherReport['sunDuration'],
+                weatherReport['sunIntensity'],
+                weatherReport['temperature'],
+                weatherReport['visibility'],
+                weatherReport['windspeed']
+            ]
             data.append(dataHour)
     return data
 
 def trainFromSensors(number):
-    i = 0
+    i = 100
     now = time.time()
     sensorList = getSensorList()
     week = 7*24*60*60 
-    timestamp = int(now-week)
+    timestamp = int(now-week*2)
     while i < number:
         sensorID = sensorList[i]
         data = getDataFromSensor(sensorID, str(timestamp))
         training_set = np.array(data)  
-        if(training_set.shape[0]>60):
+        if(training_set.shape[0]>40):
+            print(sensorID)
             sc = MinMaxScaler(feature_range = (0,1))
             training_set = sc.fit_transform(training_set)
             X,y = inAndOutput(training_set)
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-            model = loadModel("regressor.json","model.h5")
-            model =furtherTraining(X_train,y_train,model)
-            saveModel(model)
-            print("saved")
+            #model = loadModel("regressor.json","model.h5")
+            model = myRegressor(X_train,y_train)
+            #model =furtherTraining(X_train,y_train,model)
+            #saveModel(model)
+            print(sensorID)
+            
         i = i+1
-        print(i)
+    return model
         
-#trainFromSensors(50)        
-
 #data = getDataFromSensor(index, timestamp) 
 
 
@@ -104,19 +128,19 @@ def trainFromSensors(number):
 def makeScalerForY(training_set):
     scy = MinMaxScaler(feature_range = (0,1))
     scal = []
-    for i in range(60, training_set.shape[0]-5):
+    for i in range(40, training_set.shape[0]-5):
         scal.append(training_set[i:i+5, 0:2])
     scal =  np.array(scal)
     scal = np.reshape(scal, (scal.shape[0],scal.shape[1]*2))
-    scy.fit_transform(scal)
+    scy.fit(scal)
     return scy
     
 def inAndOutput(training_set):
         X = []
         y = []
-        for i in range(60, training_set.shape[0]-5):
-            X.append(training_set[i-60:i, :])
-            y.append(training_set[i:i+5, 0:2])
+        for i in range(40, training_set.shape[0]-5):
+            X.append(training_set[i-40:i, :])
+            y.append(training_set[i:i+5, :2])
         X, y = np.array(X), np.array(y)
         # Reshaping
         y = np.reshape(y, (y.shape[0],y.shape[1]*2))
@@ -146,23 +170,21 @@ def myRegressor(X_train,y_train):
     # Initialising the RNN
     regressor = Sequential()
     # Adding the first LSTM layer and some Dropout regularisation
-    regressor.add(LSTM(units = 50, return_sequences = True, input_shape = (X_train.shape[1], X_train.shape[2])))
+    regressor.add(LSTM(units = 30, return_sequences = True, input_shape = (X_train.shape[1], X_train.shape[2])))
     regressor.add(Dropout(0.2))
     # Adding a second LSTM layer and some Dropout regularisation
-    regressor.add(LSTM(units = 50, return_sequences = True))
+    regressor.add(LSTM(units = 30, return_sequences = True))
     regressor.add(Dropout(0.2))
     # Adding a third LSTM layer and some Dropout regularisation
-    regressor.add(LSTM(units = 50, return_sequences = True))
-    regressor.add(Dropout(0.2))
     # Adding a fourth LSTM layer and some Dropout regularisation
-    regressor.add(LSTM(units = 50)) 
+    regressor.add(LSTM(units = 30)) 
     regressor.add(Dropout(0.2))
     # Adding the output layer
     regressor.add(Dense(units = y_train.shape[1]))
     # Compiling the RNN
-    regressor.compile(optimizer = 'adam', loss = 'mean_squared_error',metrics=['accuracy'])
+    regressor.compile(optimizer = Adam(lr=0.001), loss = 'mean_squared_error')                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
     # Fitting the RNN to the Training set
-    regressor.fit(X_train, y_train, epochs = 200, batch_size = 5)
+    regressor.fit(X_train, y_train, epochs = 100, batch_size = 5)
     #scores = regressor.evaluate(X_test,y_test,verbose=0)
     #print(scores)
     return regressor
@@ -177,8 +199,8 @@ def loadModel(jsonpath,h5path):
     return loaded_model
 
 def furtherTraining(X_train,y_train,regressor):
-    regressor.compile(optimizer = 'adam', loss = 'mean_squared_error',metrics=['accuracy'])
-    regressor.fit(X_train,y_train, epochs = 200, batch_size = 5)
+    regressor.compile(optimizer = 'adam', loss = 'mean_squared_error')
+    regressor.fit(X_train,y_train, epochs = 100, batch_size = 5)
     return regressor
 
 def saveModel(regressor):
@@ -192,9 +214,9 @@ def predictionPlotter():
     now = time.time()
     sensorList = getSensorList()
     week = 7*24*60*60
-    timestamp = int(now-week)
+    timestamp = int(now-week*2)
     data = []
-    sensorID = sensorList[25]
+    sensorID = sensorList[5]
     data = getDataFromSensor(sensorID, str(timestamp))
     training_set = np.array(data)
     scy = makeScalerForY(training_set)
@@ -202,17 +224,25 @@ def predictionPlotter():
     training_set = sc.fit_transform(training_set)
     X,y = inAndOutput(training_set)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    model = loadModel("regressor.json","model.h5")
+    #model = loadModel("regressor.json","model.h5")    
     prediction = model.predict(X_test)
     prediction2 = scy.inverse_transform(prediction)
-    y_testU = scy.inverse_transform(y_test)
-    plot2(y_testU[:,5],'real')
-    plot2(prediction2[:,5],'predicted')
+    y_testI = scy.inverse_transform(y_test)
+   # plot2(prediction[:,0],y_testI[:,0])
+    plot2(y_testI[:,0],prediction2[:,0],'predicted2')
+    #plot2(prediction2[:,0],'predicted2')
 #predictionPlotter()
-def predictionGiver(sensorID):
-    now = time.time()
+def predictionGiver(sensorID, latestTimestamp):
+    urlFull = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + str(sensorID) + "&timestamp="+str(latestTimestamp)
+    print(urlFull)
+    with urllib.request.urlopen(urlFull) as url:
+        latestMeasurement = json.loads(url.read().decode())
+        isContinuous = latestMeasurement['continuous']
+        if (isContinuous != True):
+            return None
+
     week = 7*24*60*60
-    timestamp = int(now-week)
+    timestamp = int(latestTimestamp-week)
     data = []
     data = getDataFromSensor(sensorID, str(timestamp))
     dataArray = np.array(data)
@@ -224,6 +254,7 @@ def predictionGiver(sensorID):
     prediction = model.predict(X)
     prediction2 = scy.inverse_transform(prediction)
     return prediction2[-1,:]
+
 def plot(real,predicted):
     plt.plot(real, color = 'red', label = 'Real ')
     plt.plot(predicted, color = 'blue', label = 'Predicted')
@@ -234,8 +265,9 @@ def plot(real,predicted):
     plt.show()
 #plot(y_test,predicted)
 
-def plot2(plot,name):
-    plt.plot(plot, color = 'red', label = 'graph ')
+def plot2(plot,plot2,name):
+    plt.plot(plot, color = 'red', label = 'real ')
+    plt.plot(plot2, color = 'blue', label = 'prediction ')
     plt.title(name)
     plt.legend()
     plt.show()
@@ -247,5 +279,26 @@ nur mit einem datenset testen best loss = 0.01
 mit zwei 0.0035
 accuracy beidemal 0.2
 wenn man mit einem trainiert und dem anderen tesete loss von 0.08
-
 '''
+
+key = os.environ.get('API_KEY')
+if (key == None):
+    print("No key specified, printing predictions to console only.")
+
+sensorList = getSensorList()
+latestTimestamp = int(time.time())
+
+for i, sensorId in enumerate(sensorList):
+    print(str(i) + " / " + str(len(sensorList)))
+    result = predictionGiver(sensorId, latestTimestamp)
+    if (type(result) != type(None)):
+        if (key == None):
+            print(result)
+        else:
+            requests.post('http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/updatePredictions',
+                        json={"startTime": latestTimestamp,
+                                "sensor": sensorId, 
+                                "values": result.tolist(),
+                                "apiKey": key})
+    else:
+        print(sensorId + " is not continuous!")
