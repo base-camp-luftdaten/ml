@@ -305,8 +305,4 @@ for i, sensorId in enumerate(sensorList):
                                 "values": result.tolist(),
                                 "apiKey": key})
     else:
-<<<<<<< HEAD
         print(sensorId + " is not continuous!")
-=======
-        print(sensorId + " is not continuous!")
->>>>>>> f6813bf82d928b623572ba05a634750daafa1ecd
