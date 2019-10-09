@@ -23,6 +23,7 @@ from pandas.io.json import json_normalize
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error 
 
 from keras.models import Sequential
 from keras.layers import Dense
@@ -216,7 +217,7 @@ def predictionPlotter():
     week = 7*24*60*60
     timestamp = int(now-week*2)
     data = []
-    sensorID = sensorList[5]
+    sensorID = sensorList[34]
     data = getDataFromSensor(sensorID, str(timestamp))
     training_set = np.array(data)
     scy = makeScalerForY(training_set)
@@ -224,12 +225,15 @@ def predictionPlotter():
     training_set = sc.fit_transform(training_set)
     X,y = inAndOutput(training_set)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    #model = loadModel("regressor.json","model.h5")    
+    model = loadModel("regressor.json","model.h5")    
     prediction = model.predict(X_test)
     prediction2 = scy.inverse_transform(prediction)
     y_testI = scy.inverse_transform(y_test)
    # plot2(prediction[:,0],y_testI[:,0])
     plot2(y_testI[:,0],prediction2[:,0],'predicted2')
+    plot2(y_testI[:,8],prediction2[:,8],'predicted2')
+    print(mean_squared_error(y_test[:,0],prediction[:,0]))
+    print(mean_squared_error(y_test[:,8],prediction[:,8]))
     #plot2(prediction2[:,0],'predicted2')
 #predictionPlotter()
 def predictionGiver(sensorID, latestTimestamp):
