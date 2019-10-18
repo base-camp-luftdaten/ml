@@ -65,7 +65,6 @@ made by the sensor in 1 hour steps, up to now
 def getDataFromSensor(sensorID, timestamp):
     data = []
     fullUrl = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorUntilNow?sensor=" + sensorID + "&timestamp=" + str(timestamp)
-    print(fullUrl)
     with urllib.request.urlopen(fullUrl) as url:
         fullData = json.loads(url.read().decode())
         for singleResult in fullData:
@@ -234,7 +233,6 @@ def predictionPlotter():
 #predictionPlotter()
 def predictionGiver(sensorID, latestTimestamp):
     urlFull = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + str(sensorID) + "&timestamp="+str(latestTimestamp)
-    print(urlFull)
     with urllib.request.urlopen(urlFull) as url:
         latestMeasurement = json.loads(url.read().decode())
         isContinuous = latestMeasurement['continuous']
@@ -289,6 +287,11 @@ sensorList = getSensorList()
 latestTimestamp = int(time.time())
 
 for i, sensorId in enumerate(sensorList):
+    # check if process has been running for more than 50 minutes (= 3000 sec)
+    if (int(time.time()) - latestTimestamp > 3000):
+        print("Stopping execution because process took too long.")
+        break
+
     print(str(i) + " / " + str(len(sensorList)))
     result = predictionGiver(sensorId, latestTimestamp)
     if (type(result) != type(None)):
