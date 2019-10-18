@@ -4,11 +4,9 @@ Created on Fri May 24 14:43:25 2019
 @author: Josua
 """
 
-# Recurrent Neural Network
 
 
 
-# Part 1 - Data Preprocessing
 
 # Importing the libraries
 import numpy as np
@@ -23,6 +21,7 @@ from pandas.io.json import json_normalize
 
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error 
 
 from keras.models import Sequential
 from keras.layers import Dense
@@ -38,11 +37,13 @@ import keras
 import tensorflow as tf
 
 
+## system specific values, as our batch size is fairly small cpu should be faster.
+### change these to fit your system
 config = tf.ConfigProto( device_count = {'GPU': 0 , 'CPU': 128} ) 
 sess = tf.Session(config=config) 
 keras.backend.set_session(sess)
 
-
+## get a list with all sensors that can be used.
 def getSensorList():
     response = requests.get("http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors")
     content = response.text
@@ -95,6 +96,7 @@ def getDataFromSensor(sensorID, timestamp):
             data.append(dataHour)
     return data
 
+##trains our model with a given number of sensors.
 def trainFromSensors(number):
     i = 100
     now = time.time()
@@ -124,6 +126,7 @@ def trainFromSensors(number):
 
 
 ###############################################
+##a scaler to enable the inverse scaling of the prediction
 def makeScalerForY(training_set):
     scy = MinMaxScaler(feature_range = (0,1))
     scal = []
@@ -133,7 +136,8 @@ def makeScalerForY(training_set):
     scal = np.reshape(scal, (scal.shape[0],scal.shape[1]*2))
     scy.fit(scal)
     return scy
-    
+
+## reshape the data so that i can be used easier
 def inAndOutput(training_set):
         X = []
         y = []
@@ -145,26 +149,10 @@ def inAndOutput(training_set):
         y = np.reshape(y, (y.shape[0],y.shape[1]*2))
         X = np.reshape(X, (X.shape[0], X.shape[1], X.shape[2]))
         return X, y
-    
-def prepData(filepath):
-    dataset_train = pd.read_csv(filepath)
-    training_set = np.column_stack((dataset_train['P1'],dataset_train['P2']))
-    # Feature Scaling
-    
-    sc = MinMaxScaler(feature_range = (0,1))
-    scaled_set = sc.fit_transform(training_set)
-    
-    # Creating a data structure with 60 timesteps and 1 output
-    
-    X,y = inAndOutput(scaled_set)
-    return X,y
 
-#X_train,y_train = prepData('../Data/trainwithp1p2.csv')
-#X_test,y_test = prepData('../Data/testwithp1p2.csv')
+
 #########################################################
-# Part 2 - Building the RNN
-
-# Importing the Keras libraries and packages
+##creating the model
 def myRegressor(X_train,y_train):
     # Initialising the RNN
     regressor = Sequential()
@@ -188,7 +176,7 @@ def myRegressor(X_train,y_train):
     #print(scores)
     return regressor
 #regressor = myRegressor(X_train,y_train)
-
+## loading the model with a path
 def loadModel(jsonpath,h5path):
     json_file = open(jsonpath, 'r')
     loaded_model_json = json_file.read()
@@ -196,26 +184,27 @@ def loadModel(jsonpath,h5path):
     loaded_model = model_from_json(loaded_model_json)
     loaded_model.load_weights(h5path)
     return loaded_model
-
+## loading and training on a model
 def furtherTraining(X_train,y_train,regressor):
     regressor.compile(optimizer = 'adam', loss = 'mean_squared_error')
     regressor.fit(X_train,y_train, epochs = 100, batch_size = 5)
     return regressor
-
+## saving the model
 def saveModel(regressor):
     regressor_json = regressor.to_json()
     with open ("regressor.json", "w") as json_file:
         json_file.write(regressor_json)
     regressor.save_weights("model.h5")
-#saveModel(regressor)
 
+## plotting the predictions, one hour and 5 hours in the future (p10)
+## also prints the error of the plotted predictions
 def predictionPlotter():
     now = time.time()
     sensorList = getSensorList()
     week = 7*24*60*60
     timestamp = int(now-week*2)
     data = []
-    sensorID = sensorList[5]
+    sensorID = sensorList[34]
     data = getDataFromSensor(sensorID, str(timestamp))
     training_set = np.array(data)
     scy = makeScalerForY(training_set)
@@ -223,14 +212,17 @@ def predictionPlotter():
     training_set = sc.fit_transform(training_set)
     X,y = inAndOutput(training_set)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    #model = loadModel("regressor.json","model.h5")    
+    model = loadModel("regressor.json","model.h5")    
     prediction = model.predict(X_test)
     prediction2 = scy.inverse_transform(prediction)
     y_testI = scy.inverse_transform(y_test)
-   # plot2(prediction[:,0],y_testI[:,0])
+
     plot2(y_testI[:,0],prediction2[:,0],'predicted2')
-    #plot2(prediction2[:,0],'predicted2')
-#predictionPlotter()
+    plot2(y_testI[:,8],prediction2[:,8],'predicted2')
+    print(mean_squared_error(y_test[:,0],prediction[:,0]))
+    print(mean_squared_error(y_test[:,8],prediction[:,8]))
+
+## returns the next 5 hours of p10 and p25
 def predictionGiver(sensorID, latestTimestamp):
     urlFull = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + str(sensorID) + "&timestamp="+str(latestTimestamp)
     with urllib.request.urlopen(urlFull) as url:
@@ -253,6 +245,7 @@ def predictionGiver(sensorID, latestTimestamp):
     prediction2 = scy.inverse_transform(prediction)
     return prediction2[-1,:]
 
+## unused function that could create a plot
 def plot(real,predicted):
     plt.plot(real, color = 'red', label = 'Real ')
     plt.plot(predicted, color = 'blue', label = 'Predicted')
@@ -261,24 +254,18 @@ def plot(real,predicted):
     plt.ylabel('P1')
     plt.legend()
     plt.show()
-#plot(y_test,predicted)
 
+
+### function used in predictionPlotter() to create the plots
 def plot2(plot,plot2,name):
     plt.plot(plot, color = 'red', label = 'real ')
     plt.plot(plot2, color = 'blue', label = 'prediction ')
     plt.title(name)
     plt.legend()
     plt.show()
-#plot2(y_testU[:,5],'real')
-#plot2(prediction[:,5],'predicted')
-#regressor = furtherTraining(X_test,y_test,regressor)
-'''
-nur mit einem datenset testen best loss = 0.01
-mit zwei 0.0035
-accuracy beidemal 0.2
-wenn man mit einem trainiert und dem anderen tesete loss von 0.08
-'''
 
+    
+## giving the prediction to the backend
 key = os.environ.get('API_KEY')
 if (key == None):
     print("No key specified, printing predictions to console only.")
