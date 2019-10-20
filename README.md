@@ -26,4 +26,4 @@ For example:
 API_KEY=my-api-key python3 train.py
 ```
 
-Otherwise, the server is not going to accept the heatmaps/predictions.
+Otherwise, the server is not going to accept the predictions.
