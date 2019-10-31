@@ -272,7 +272,7 @@ def isContinuous(sensorID, timestamp):
 
 
 # returns the next 5 hours of p10 and p25
-def predictionGiver(sensorID, latestTimestamp):
+def predictionGiver(sensorID, latestTimestamp, model):
     if isContinuous(sensorID, latestTimestamp) != True:
         return None
 
@@ -286,15 +286,12 @@ def predictionGiver(sensorID, latestTimestamp):
     scy = makeScalerForY(dataArray)
     sc = MinMaxScaler(feature_range=(0, 1))
     dataArray = sc.fit_transform(dataArray)
-    X, y = inAndOutput(dataArray)
-    model = loadModel("regressor.json", "model.h5")
+    X = inAndOutput(dataArray)
     prediction = model.predict(X)
     prediction2 = scy.inverse_transform(prediction)
     return prediction2[-1, :]
 
 # unused function that could create a plot
-
-
 def plot(real, predicted):
     plt.plot(real, color='red', label='Real ')
     plt.plot(predicted, color='blue', label='Predicted')
@@ -321,6 +318,7 @@ if (key == None):
 
 sensorList = getSensorList()
 latestTimestamp = int(time.time())
+model = loadModel("regressor.json", "model.h5")
 
 for i, sensorId in enumerate(sensorList):
     # check if process has been running for more than 50 minutes (= 3000 sec)
@@ -329,7 +327,7 @@ for i, sensorId in enumerate(sensorList):
         break
 
     print(str(i) + " / " + str(len(sensorList)))
-    result = predictionGiver(sensorId, latestTimestamp)
+    result = predictionGiver(sensorId, latestTimestamp, model)
     if (type(result) != type(None)):
         if (key == None):
             print(result)
