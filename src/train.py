@@ -41,8 +41,11 @@ import tensorflow as tf
 # sess = tf.Session(config=config)
 # keras.backend.set_session(sess)
 
-# get a list with all sensors that can be used.
+
 def getSensorList():
+    '''
+    get a list with all sensors that can be used
+    '''
     response = requests.get(
         "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors", timeout=10)
     data = response.json()
@@ -54,13 +57,11 @@ def getSensorList():
     return sensorList
 
 
-'''
-Starting from timestamp, retrieves all measurements
-made by the sensor in 1 hour steps, up to now
-'''
-
-
 def getDataFromSensor(sensorID, timestamp):
+    '''
+    Starting from timestamp, retrieves all measurements
+    made by the sensor in 1 hour steps, up to now
+    '''
     data = []
     fullData = []
     fullUrl = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorUntilNow?sensor=" + \
@@ -79,14 +80,24 @@ def getDataFromSensor(sensorID, timestamp):
         measurement = singleResult['measurement']
         weatherReport = singleResult['weatherReport']
 
-        if (weatherReport == None):
+        if (weatherReport is None): 
             # use the last available weatherReport instead
             weatherReport = lastWeatherReport
+
+            # unless the last available weatherReport is also missing
+            if (weatherReport is None):
+                return []
         else:
             lastWeatherReport = weatherReport
 
-        if (measurement == None):
+        if (measurement is None):
             return []
+
+        if (weatherReport is None):
+            print("here")
+            print(weatherReport)
+            print(lastWeatherReport)
+            print(fullUrl)
 
         dataHour = [
             measurement['p10'],
@@ -106,10 +117,11 @@ def getDataFromSensor(sensorID, timestamp):
         data.append(dataHour)
     return data
 
-# trains our model with a given number of sensors.
-
 
 def trainFromSensors(number):
+    '''
+    trains our model with a given number of sensors.
+    '''
     i = 100
     now = time.time()
     sensorList = getSensorList()
@@ -139,8 +151,10 @@ def trainFromSensors(number):
 
 
 ###############################################
-# a scaler to enable the inverse scaling of the prediction
 def makeScalerForY(training_set):
+    '''
+    a scaler to enable the inverse scaling of the prediction
+    '''
     scy = MinMaxScaler(feature_range=(0, 1))
     scal = []
     for i in range(40, training_set.shape[0]-5):
@@ -150,10 +164,11 @@ def makeScalerForY(training_set):
     scy.fit(scal)
     return scy
 
-# reshape the data so that i can be used easier
-
 
 def inAndOutput(training_set):
+    '''
+    reshape the data so that i can be used easier
+    '''
     X = []
     y = []
     for i in range(40, training_set.shape[0]-5):
@@ -167,8 +182,10 @@ def inAndOutput(training_set):
 
 
 #########################################################
-# creating the model
 def myRegressor(X_train, y_train):
+    '''
+    creating the model
+    '''
     # Initialising the RNN
     regressor = Sequential()
     # Adding the first LSTM layer and some Dropout regularisation
@@ -192,37 +209,44 @@ def myRegressor(X_train, y_train):
     # print(scores)
     return regressor
 # regressor = myRegressor(X_train,y_train)
-# loading the model with a path
 
 
 def loadModel(jsonpath, h5path):
+    '''
+    loading the model with a path
+    '''
     json_file = open(jsonpath, 'r')
     loaded_model_json = json_file.read()
     json_file.close()
     loaded_model = model_from_json(loaded_model_json)
     loaded_model.load_weights(h5path)
     return loaded_model
-# loading and training on a model
 
 
 def furtherTraining(X_train, y_train, regressor):
+    '''
+    loading and training on a model
+    '''
     regressor.compile(optimizer='adam', loss='mean_squared_error')
     regressor.fit(X_train, y_train, epochs=100, batch_size=5)
     return regressor
-# saving the model
 
 
 def saveModel(regressor):
+    '''
+    saving the model
+    '''
     regressor_json = regressor.to_json()
     with open("regressor.json", "w") as json_file:
         json_file.write(regressor_json)
     regressor.save_weights("model.h5")
 
-# plotting the predictions, one hour and 5 hours in the future (p10)
-# also prints the error of the plotted predictions
-
 
 def predictionPlotter():
+    '''
+    plotting the predictions, one hour and 5 hours in the future (p10)
+    also prints the error of the plotted predictions
+    '''
     now = time.time()
     sensorList = getSensorList()
     week = 7*24*60*60
@@ -247,10 +271,12 @@ def predictionPlotter():
     print(mean_squared_error(y_test[:, 0], prediction[:, 0]))
     print(mean_squared_error(y_test[:, 8], prediction[:, 8]))
 
-# check if a sensor is continuous
-
 
 def isContinuous(sensorID, timestamp):
+    '''
+    check if a sensor is continuous
+    '''
+
     fullUrl = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + \
         str(sensorID) + "&timestamp="+str(latestTimestamp)
 
@@ -271,14 +297,15 @@ def isContinuous(sensorID, timestamp):
     return isContinuous == True
 
 
-# returns the next 5 hours of p10 and p25
 def predictionGiver(sensorID, latestTimestamp, model):
+    '''
+    returns the next 5 hours of p10 and p25
+    '''
     if isContinuous(sensorID, latestTimestamp) != True:
         return None
 
     week = 7*24*60*60
     timestamp = int(latestTimestamp-week)
-    data = []
     data = getDataFromSensor(sensorID, str(timestamp))
     if (data == []):
         return None
@@ -286,13 +313,16 @@ def predictionGiver(sensorID, latestTimestamp, model):
     scy = makeScalerForY(dataArray)
     sc = MinMaxScaler(feature_range=(0, 1))
     dataArray = sc.fit_transform(dataArray)
-    X = inAndOutput(dataArray)
+    X, _ = inAndOutput(dataArray)
     prediction = model.predict(X)
     prediction2 = scy.inverse_transform(prediction)
     return prediction2[-1, :]
 
-# unused function that could create a plot
+
 def plot(real, predicted):
+    '''
+    unused function that could create a plot
+    '''
     plt.plot(real, color='red', label='Real ')
     plt.plot(predicted, color='blue', label='Predicted')
     plt.title('P1 predic')
@@ -302,8 +332,10 @@ def plot(real, predicted):
     plt.show()
 
 
-# function used in predictionPlotter() to create the plots
 def plot2(plot, plot2, name):
+    '''
+    function used in predictionPlotter() to create the plots
+    '''
     plt.plot(plot, color='red', label='real ')
     plt.plot(plot2, color='blue', label='prediction ')
     plt.title(name)
