@@ -393,8 +393,8 @@ if __name__ == '__main__':
     scheduler = BlockingScheduler()
     scheduler.add_job(createPredictions,
                       trigger='cron',
-                      minute='*/5',
-                      #   hour='*/1',
+                      minute='5',
+                      hour='*/1',
                       max_instances=1)
 
     print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
