@@ -179,6 +179,7 @@ def inAndOutput(training_set):
     for i in range(40, training_set.shape[0]-5):
         X.append(training_set[i-40:i, :])
         y.append(training_set[i:i+5, :2])
+
     X, y = np.array(X), np.array(y)
     # Reshaping
     y = np.reshape(y, (y.shape[0], y.shape[1]*2))
@@ -350,7 +351,6 @@ def plot2(plot, plot2, name):
 if (API_KEY == None):
     print("No key specified, printing predictions to console only.")
 
-model = loadModel("regressor.json", "model.h5")
 
 def createPredictions():
     '''
@@ -360,6 +360,7 @@ def createPredictions():
     '''
     sensorList = getSensorList()
     latestTimestamp = int(time.time())
+    model = loadModel("regressor.json", "model.h5")
 
     for i, sensorId in enumerate(sensorList):
         # check if process has been running for more than 50 minutes (= 3000 sec)
@@ -390,8 +391,12 @@ def createPredictions():
 
 if __name__ == '__main__':
     scheduler = BlockingScheduler()
-    scheduler.add_job(createPredictions, trigger='cron', minute='5',
-                      hour='*/1', max_instances=1)
+    scheduler.add_job(createPredictions,
+                      trigger='cron',
+                      minute='*/5',
+                      #   hour='*/1',
+                      max_instances=1)
+
     print('Press Ctrl+{0} to exit'.format('Break' if os.name == 'nt' else 'C'))
 
     try:
