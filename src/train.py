@@ -39,6 +39,8 @@ import tensorflow as tf
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 API_KEY = os.environ.get('API_KEY')
+# BASE_URL = "http://localhost:8080"
+BASE_URL = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService"
 
 # system specific values, as our batch size is fairly small cpu should be faster.
 # change these to fit your system
@@ -51,8 +53,7 @@ def getSensorList():
     '''
     get a list with all sensors that can be used
     '''
-    response = requests.get(
-        "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/sensors", timeout=10)
+    response = requests.get(BASE_URL + "/api/measurements/sensors", timeout=10)
     data = response.json()
 
     sensorList = []
@@ -69,7 +70,7 @@ def getDataFromSensor(sensorID, timestamp):
     '''
     data = []
     fullData = []
-    fullUrl = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensorUntilNow?sensor=" + \
+    fullUrl = BASE_URL + "/api/measurements/bySensorUntilNow?sensor=" + \
         sensorID + "&timestamp=" + str(timestamp)
 
     try:
@@ -282,7 +283,7 @@ def isContinuous(sensorID, timestamp):
     check if a sensor is continuous
     '''
 
-    fullUrl = "http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/bySensor?sensor=" + \
+    fullUrl = BASE_URL + "/api/measurements/bySensor?sensor=" + \
         str(sensorID) + "&timestamp="+str(timestamp)
 
     data = {}
@@ -375,7 +376,7 @@ def createPredictions():
                 print(result)
             else:
                 try:
-                    requests.post('http://basecamp-demos.informatik.uni-hamburg.de:8080/AirDataBackendService/api/measurements/updatePredictions',
+                    requests.post(BASE_URL + "/api/measurements/updatePredictions",
                                   timeout=5,
                                   json={"startTime": latestTimestamp,
                                         "sensor": sensorId,
